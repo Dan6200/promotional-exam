@@ -1,7 +1,8 @@
 <?php
 
+use App\Http\Controllers\TemplateController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', 'TemplateController@index');
-Route::post('/upload', 'TemplateController@upload');
-Route::get('/generate', 'TemplateController@generate');
+Route::get('/', [TemplateController::class, 'index']);
+Route::post('/upload', [TemplateController::class, 'upload']);
+Route::get('/generate', [TemplateController::class, 'generate'])->name('generate');
