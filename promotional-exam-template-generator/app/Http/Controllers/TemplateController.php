@@ -104,8 +104,9 @@ class TemplateController extends Controller
                 $pdfContent = $this->pdfConverter->convertHtmlToPdf($htmlContent);
                 // Name file according record
                 $fileName = $this->sanitizeFileName($record['STAFF_NAME']) . '_' . $this->sanitizeFileName($record['STAFF_ID']) . '.pdf';
+                $firstName = $record['STAFF_NAME'];
                 // Send file as email
-                Mail::to($record('EMAIL'))->send(new DocumentMail($fileName,$pdfContent));
+                Mail::to($record('EMAIL'))->send(new DocumentMail($firstName, $fileName,$pdfContent));
             }
         }
         else

@@ -3,51 +3,33 @@
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 class DocumentMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    /**
-     * Create a new message instance.
-     */
-    public function __construct()
+    public $firstName;
+    public $fileName;
+    public $pdfContent;
+
+    public function __construct($firstName, $fileName, $pdfContent)
     {
-        //
+        $this->firstName=$firstName;
+        $this->fileName=$fileName;
+        $this->pdfContent=$pdfContent;
     }
 
-    /**
-     * Get the message envelope.
-     */
-    public function envelope(): Envelope
+    public function build(): array
     {
-        return new Envelope(
-            subject: 'Document Mail',
-        );
-    }
-
-    /**
-     * Get the message content definition.
-     */
-    public function content(): Content
-    {
-        return new Content(
-            view: 'view.name',
-        );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
-     */
-    public function attachments(): array
-    {
-        return [];
+        return $this->view('emails.document')
+                    ->with([
+                        'firstName' => $this.firstName
+                    ])
+                    ->attachData($this.pdfContent, $this.fileName, [
+                        'mime' => 'application/pdf'
+                    ])
+                    ->subject('Your Report Card for the SEC Promotional Exam.');
     }
 }
