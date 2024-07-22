@@ -4,9 +4,15 @@
     <title>Generated Documents</title>
 </head>
 <body>
-    @foreach($documents as $document)
-        <pre>{{ $document }}</pre>
-        <hr>
-    @endforeach
+    <h1>Generated Documents</h1>
+    <ul>
+        @foreach ($documents as $document)
+            <li>
+                <a href="{{ route('download', ['fileName' => basename($document)]) }}" download>
+                    Download {{ basename($document) }}
+                </a>
+            </li>
+        @endforeach
+    </ul>
 </body>
 </html>

@@ -2,107 +2,121 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ExcelProcessor;
+use App\Services\DocumentGenerator;
+use App\Services\DocumentConverter;
+use App\Services\PdfConverter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use League\Csv\Reader;
-use League\Csv\Statement;
-use PhpOffice\PhpWord\TemplateProcessor;
-use PhpOffice\PhpWord\IOFactory;
 use Illuminate\Support\Facades\Log;
-use Dompdf\Dompdf;
-use Dompdf\Options;
+use App\Mail\DocumentMail;
 
 class TemplateController extends Controller
 {
-    public function index() {
+    protected $excelProcessor;
+    protected $documentGenerator;
+    protected $documentConverter;
+    protected $pdfConverter;
+
+    public function __construct(ExcelProcessor $excelProcessor, DocumentGenerator $documentGenerator, DocumentConverter $documentConverter, PdfConverter $pdfConverter)
+    {
+        $this->excelProcessor = $excelProcessor;
+        $this->documentGenerator = $documentGenerator;
+        $this->documentConverter = $documentConverter;
+        $this->pdfConverter = $pdfConverter;
+    }
+
+    public function index()
+    {
         return view('upload');
     }
 
-    public function upload(Request $request) {
+    public function upload(Request $request)
+    {
         $request->validate([
-            'csv' => 'required|mimes:csv,txt'
+            'excel' => 'required|mimes:xlsx,xls',
+            'template' => 'required|mimes:docx'
         ]);
-        $csvPath = $request->file('csv')->store('uploads');
-        return redirect()->route('generate')->with('csv-path',$csvPath);
+        // Store files in the temporary directory
+        $excelPath = $request->file('excel')->storeAs('', 'excel_' . time() . '.xlsx', ['disk' => 'temp']);
+        $templatePath = $request->file('template')->storeAs('', 'template_' . time() . '.docx', ['disk' => 'temp']);
+
+        return redirect()->route('generate')->with(['excel-path'=> $excelPath, 'template-path' => $templatePath]);
     }
 
-    public function generate() {
-        $csvPath=session('csv-path');
-        if (!$csvPath) {
-            return redirect('/')->withErrors('No CSV file uploaded');
+    public function generate()
+    {
+        $excelPath=session('excel-path');
+        $templatePath=session('template-path');
+        if (!$excelPath||!$templatePath)
+        {
+            return redirect('/')->withErrors('Files not uploaded');
         }
-        $templatePath = base_path('templates/reportCardTemplateJunior.docx');
-        if (!file_exists($templatePath)) {
-            return redirect('/')->withErrors('Template file not found.');
+
+        $excelFullPath=null;
+        $templateFullPath=null;
+        try
+        {
+            $excelFullPath = sys_get_temp_dir() . '/' . $excelPath;
+            $templateFullPath = sys_get_temp_dir() . '/' . $templatePath;
+            $sheets = $this->excelProcessor->process($excelFullPath);
+            $zipFilePath = $this->sendDocumentsAsEmail($sheets, $templateFullPath);
+
+            return response()->download($zipFilePath)->deleteFileAfterSend(true);
         }
-
-        try {
-            $csv = Reader::createFromPath(storage_path('app/' . $csvPath), 'r');
-            $csv->setHeaderOffset(0);
-            $records = (new Statement())->process($csv);
-
-
-            $generatedDocuments = [];
-
-            foreach ($records as $record) {
-                Log::info ('Processing record: ', $record);
-
-                // Clone the template processor for each record
-                $tempDoc = new TemplateProcessor($templatePath);
-
-                // Replace placeholders in the template
-                foreach ($record as $field => $value) {
-                    try {
-                        $tempDoc->setValue($field, $value);
-                    } catch (\Exception $e) {
-                        Log::error("Error setting value for field $field: " . $e->getMessage());
-                        return redirect('/')->withErrors(['error' => 'Error setting value for field ' . $field . ': ' . $e->getMessage()]);
-                    }
-                }
-
-
-                // Save the generated document to a temporary file
-                $tempWordPath=tempnam(sys_get_temp_dir(), 'word') . '.docx';
-                $outputPath = storage_path('app/generated_' . $record['STAFF_NAME'] . '_' . $record['STAFF_ID'] . '.pdf');
-                try {
-                    $tempDoc->saveAs($tempWordPath);
-                    $this->convertWordTemplateToPdf($tempWordPath, $outputPath);
-                } catch (\Exception $e) {
-                    Log::error('Error saving document: ' . $e->getMessage());
-                    return redirect('/')->withErrors(['error' => 'Error saving document: ' . $e->getMessage()]);
-                }
-                $generatedDocuments[]=$outputPath;
-            }
-            return view('generated', ['documents' => $generatedDocuments]);
-        } catch (\Exception $e) {
+        catch (\Exception $e)
+        {
             Log::error('General error: ' . $e->getMessage());
             return redirect('/')->withErrors(['error' => 'An error occurred: ' . $e->getMessage()]);
         }
-    }
-
-    private function convertWordTemplateToPdf($tempWordPath, $pdfFilePath) {
-        try {
-            $phpWord = IOFactory::load($tempWordPath);
-            $htmlWriter = IOFactory::createWriter($phpWord, 'HTML');
-            ob_start();
-            $htmlWriter->save("php://output");
-            $htmlContent = ob_get_clean();
-
-            // Convert HTML to PDF
-            $dompdf = new Dompdf();
-            $options = new Options();
-            $options->set('isHtml5ParserEnabled', true);
-            $options->set('isRemoteEnabled', true);
-            $dompdf->setOptions($options);
-            $dompdf->loadHtml($htmlContent);
-            $dompdf->setPaper('A4', 'portrait');
-            // Render the HTML as PDF
-            $dompdf->render();
-            // Output the generated PDF to a file
-            file_put_contents($pdfFilePath, $dompdf->output());
-        } catch (\Exception $e) {
-            Log::error('Error Converting To Pdf: ' . $e->getMessage());
-            return redirect('/')->withErrors(['error'=>'Error trying to convert HTML to PDF: ' . $e->getMessage()]);
+        finally
+        {
+            @unlink($excelFullPath);
+            @unlink($templateFullPath);
         }
     }
+
+    public function download($fileName)
+    {
+        $filePath = sys_get_temp_dir() . "/$fileName";
+        if (file_exists($filePath))
+        {
+            return response()->download($filePath)->deleteFileAfterSend(true);
+        }
+        else
+        {
+            return redirect('/')->withErrors('File not found');
+        }
+    }
+
+    private function sendDocumentsAsEmail($file, $templatePath)
+    {
+
+        foreach ($file as $records)
+        {
+            foreach ($records as $record)
+            {
+                // Generate document from template
+                $documentPath = $this->documentGenerator->generate($record, $templatePath);
+                // Convert document content to html
+                $htmlContent = $this->documentConverter->convertWordToHtml($documentPath);
+                // Then convert htmlContent to Pdf
+                $pdfContent = $this->pdfConverter->convertHtmlToPdf($htmlContent);
+                // Name file according record
+                $fileName = $this->sanitizeFileName($record['STAFF_NAME']) . '_' . $this->sanitizeFileName($record['STAFF_ID']) . '.pdf';
+                // Send file as email
+                Mail::to($record('EMAIL'))->send(new DocumentMail($fileName,$pdfContent));
+            }
+        }
+        else
+        {
+            throw new \Exception('Failed to send document as email');
+        }
+    }
+
+    private function sanitizeFileName($fileName)
+    {
+        return preg_replace('/[^a-zA-Z0-9]/', '_', $fileName);
+    }
+
 }

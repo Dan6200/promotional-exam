@@ -6,6 +6,7 @@
 /storage/*.key
 /vendor
 .editorconfig
+*.vim*
 .env.*
 .env
 .env.backup

@@ -56,6 +56,11 @@ return [
             'throw' => false,
         ],
 
+        'temp' => [
+            'driver' => 'local',
+            'root' => sys_get_temp_dir(),
+        ],
+
     ],
 
     /*
