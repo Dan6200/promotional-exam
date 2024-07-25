@@ -21,13 +21,13 @@ class DocumentMail extends Mailable
         $this->pdfContent=$pdfContent;
     }
 
-    public function build(): array
+    public function build(): DocumentMail
     {
         return $this->view('emails.document')
                     ->with([
-                        'firstName' => $this.firstName
+                        'firstName' => $this->firstName
                     ])
-                    ->attachData($this.pdfContent, $this.fileName, [
+                    ->attachData($this->pdfContent, $this->fileName, [
                         'mime' => 'application/pdf'
                     ])
                     ->subject('Your Report Card for the SEC Promotional Exam.');

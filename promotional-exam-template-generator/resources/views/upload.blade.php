@@ -2,23 +2,46 @@
 <html>
 <head>
     <title>Template Generator</title>
+    <style>
+        .alert-success {
+            color: green;
+        }
+        .alert-errors {
+            color: red;
+        }
+        table {
+            font-size: 16px;
+            width: 66%;
+            margin: 12.5% auto;
+        }
+        .alert {
+            background-color: yellow;
+            font-size: 16px;
+            border-radius: 16px;
+            padding: 16px;
+            overflow-x: scroll;
+        }
+        body {
+            padding: 10px;
+        }
+    </style>
 </head>
 <body>
     @if ($errors->any())
-        <div>
-            <ul>
+        <pre>
+            <code class='alert alert-errors'>
                 @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
+                    {{ $error }}
                 @endforeach
-            </ul>
-        </div>
+            </code>
+        </pre>
     @endif
 
     <table cellspacing='0' cellpadding='10px' width=100%>
         <form action="/upload" method="POST" enctype="multipart/form-data">
             @csrf
             <tr>
-                <td width='25%'>
+                <td width='33%'>
                     <label for="excel">Upload Excel Spreadsheet:</label>
                 </td>
                 <td colspan="2">
@@ -26,7 +49,7 @@
                 </td>
             </tr>
             <tr>
-                <td width='25%'>
+                <td width='33%'>
                     <label for="template">Upload Word Template:</label>
                 </td>
                 <td colspan="2">

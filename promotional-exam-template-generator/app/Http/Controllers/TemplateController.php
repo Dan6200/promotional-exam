@@ -9,6 +9,7 @@ use App\Services\PdfConverter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use App\Mail\DocumentMail;
 
 class TemplateController extends Controller
@@ -28,7 +29,7 @@ class TemplateController extends Controller
 
     public function index()
     {
-        return view('upload');
+        return view('home');
     }
 
     public function upload(Request $request)
@@ -60,9 +61,9 @@ class TemplateController extends Controller
             $excelFullPath = sys_get_temp_dir() . '/' . $excelPath;
             $templateFullPath = sys_get_temp_dir() . '/' . $templatePath;
             $sheets = $this->excelProcessor->process($excelFullPath);
-            $zipFilePath = $this->sendDocumentsAsEmail($sheets, $templateFullPath);
+            $this->sendDocumentsAsEmail($sheets, $templateFullPath);
 
-            return response()->download($zipFilePath)->deleteFileAfterSend(true);
+            return redirect('/')->with('success', 'Emails Sent Successfully.');
         }
         catch (\Exception $e)
         {
@@ -92,26 +93,32 @@ class TemplateController extends Controller
     private function sendDocumentsAsEmail($file, $templatePath)
     {
 
-        foreach ($file as $records)
+        try
         {
-            foreach ($records as $record)
+            foreach ($file as $records)
             {
-                // Generate document from template
-                $documentPath = $this->documentGenerator->generate($record, $templatePath);
-                // Convert document content to html
-                $htmlContent = $this->documentConverter->convertWordToHtml($documentPath);
-                // Then convert htmlContent to Pdf
-                $pdfContent = $this->pdfConverter->convertHtmlToPdf($htmlContent);
-                // Name file according record
-                $fileName = $this->sanitizeFileName($record['STAFF_NAME']) . '_' . $this->sanitizeFileName($record['STAFF_ID']) . '.pdf';
-                $firstName = $record['STAFF_NAME'];
-                // Send file as email
-                Mail::to($record('EMAIL'))->send(new DocumentMail($firstName, $fileName,$pdfContent));
+                foreach ($records as $record)
+                {
+                    // Generate document from template
+                    $documentPath = $this->documentGenerator->generate($record, $templatePath);
+                    // Convert document content to html
+                    $htmlContent = $this->documentConverter->convertWordToHtml($documentPath);
+                    // Then convert htmlContent to Pdf
+                    $pdfContent = $this->pdfConverter->convertHtmlToPdf($htmlContent);
+                    // Name file according record
+                    $fileName = $this->sanitizeFileName($record['STAFF_NAME']) . '_' . $this->sanitizeFileName($record['STAFF_ID']) . '.pdf';
+                    $firstName = $record['STAFF_NAME'];
+                    // Send file as email
+                    /*Mail::to($record('EMAIL'))->send(new DocumentMail($firstName, $fileName,$pdfContent));*/
+                    Mail::to('example@email.com')->send(new DocumentMail($firstName, $fileName, $pdfContent));
+                    break;
+                }
+                break;
             }
         }
-        else
+        catch (\Exception $e)
         {
-            throw new \Exception('Failed to send document as email');
+            throw new \Exception('Failed to send document as email: '.$e);
         }
     }
 
